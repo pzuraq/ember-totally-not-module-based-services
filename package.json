@@ -1,15 +1,15 @@
 {
   "name": "ember-totally-not-module-based-services",
   "version": "0.0.0",
-  "description": "The default blueprint for ember-cli addons.",
+  "description": "Importable services for Ember!",
   "main": "addon/index.js",
   "module": "addon/index.js",
   "keywords": [
     "ember-addon"
   ],
-  "repository": "",
+  "repository": "https://github.com/pzuraq/ember-totally-not-module-based-services",
   "license": "MIT",
-  "author": "",
+  "author": "Chris Garrett <me@pzuraq.com>",
   "directories": {
     "doc": "doc",
     "test": "tests"
