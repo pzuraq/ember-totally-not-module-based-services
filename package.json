@@ -1,6 +1,6 @@
 {
   "name": "ember-totally-not-module-based-services",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Importable services for Ember!",
   "main": "addon/index.js",
   "module": "addon/index.js",
