@@ -3,11 +3,18 @@ import Resolver from './resolver';
 import loadInitializers from 'ember-load-initializers';
 import config from './config/environment';
 
-const App = Application.extend({
-  modulePrefix: config.modulePrefix,
-  podModulePrefix: config.podModulePrefix,
-  Resolver
-});
+import { SomeServiceInterface, SomeServiceImplementation } from './services/some';
+
+class App extends Application {
+  Resolver = Resolver;
+
+  modulePrefix = config.modulePrefix;
+  podModulePrefix = config.podModulePrefix;
+
+  serviceOverrides = [
+    [SomeServiceInterface, SomeServiceImplementation],
+  ];
+}
 
 loadInitializers(App, config.modulePrefix);
 

@@ -56,9 +56,17 @@ This addon contains 3 exports:
 ```js
 import {
   service,
+  serviceInterface,
   lookup,
-  register,
 } from 'ember-totally-not-module-based-services';
+```
+
+In addition, it exports a test helper for registering mock services in tests:
+
+```js
+import {
+  registerMockService
+} from 'ember-totally-not-module-based-services/test-support';
 ```
 
 ### `service`
@@ -93,65 +101,59 @@ The class must extend from Ember's `Service` class currently. Like standard
 string based service injections, this service will be a singleton, and will be
 shared anywhere it is injected.
 
-### `register`
+### `@serviceInterface`
 
-```ts
-function register(
-  owner: Owner,
-  BaseClass: ClassDefinition,
-  SubClass: ClassDefinition
-): undefined;
-```
-
-The `register` function can be used to override a service, like in cases when
-you need to provide a different implementation. For instance, if we wanted to
-override our `DemoService` from the example above, we could do:
+Usually, services only have a single implementation. Sometimes however, services
+are meant to define an _interface_ instead. For instance, you could define a
+standardized data store that exposes the same API to users, but has different
+implementations for different types of APIs - JSON API and GraphQL:
 
 ```js
-import { register } from 'ember-totally-not-module-based-services';
-import DemoService from '../services/demo';
+import { serviceInterface } from 'ember-totally-not-module-based-services';
 
-class OverrideService extends DemoService {
-  hello = 'galaxy!';
+@serviceInterface
+export class Store extends Service {
+  // returns a model containing the data
+  loadData() {}
 }
 
-export function initialize(appInstance) {
-  register(appInstance, DemoService, OverrideService);
+export class JsonApiStore extends Store {
+  loadData() {
+    // Load JSON API data and convert it into a model
+  }
 }
 
-export default {
-  initialize,
-};
+export class GraphQlStore extends Store {
+  loadData() {
+    // Load GraphQL data and convert into a model
+  }
+}
 ```
 
-This can also be used in tests to stub out a service:
+Now, users of the Store can inject it into their classes, without needing to
+know the details of how the store is implemented:
 
 ```js
-import { module, test } from 'qunit';
-import { setupApplicationTest } from 'ember-qunit';
-import { register } from 'ember-totally-not-module-based-services';
-import DemoService from 'my-app/services/demo';
-
-module('Acceptance | service', function(hooks) {
-  setupApplicationTest(hooks);
-
-  test('test some things', async function(assert) {
-    register(
-      this.owner,
-      DemoService,
-      class extends SomeService {
-        hello = 'universe!';
-      }
-    );
-
-    // test some things!
-  });
-});
+export class MyComponent extends Component {
+  @service(Store) store;
+}
 ```
 
-`register` is restricted to only allow you to register _subclasses_ of the base
-class. The reason for this is to prevent confusion, and guide users toward
-better programming practices.
+And the user can then override the service in their application definition,
+choosing the service they want to actually use.
+
+```js
+// app/app.js
+class App extends Application {
+  serviceOverrides = [
+    [Store, JsonApiStore],
+  ];
+}
+```
+
+The JSON API and GraphQL implementations can then be swapped out under the hood
+as an implementation detail. This keeps the _users_ of the store more flexible,
+and is especially useful for addons and ecosystems of components.
 
 ### `lookup`
 
@@ -163,173 +165,21 @@ function lookup(owner: Owner, Class: ClassDefinition): any;
 at any given time. This can be particularly useful if you need to access the
 service in tests.
 
-### Structuring and Overriding Services
+### Mocking Services in Tests
 
-As mentioned above, `register` is restricted to only allow you to register
-_subclasses_ of the base class. The reason for this is to prevent confusion, and
-guide users toward better programming practices.
-
-Put another way, it would be pretty strange if you injected one class, and then
-received a _completely_ different class that wasn't related to the original in
-any way. Typically, when you're overriding a service, the goal is to provide
-another services that has the same _methods_ and _properties_, but has somewhat
-different behavior. For instance, you may have a `CookieService` which has a few
-public methods, like `getValue` and `setValue`:
+You can mock a service with any replacement class in tests using the
+`registerMockService` function.
 
 ```js
-class CookieService extends Service {
-  getValue(key) {
-    // get the value from the cookie
-  }
+import { registerMockService } from 'ember-totally-not-module-based-services/test-support';
 
-  setValue(key, value) {
-    // set the value in the cookie
-  }
-}
-```
-
-However, you need two different implementations of this service, one for the
-browser, and one for Fastboot on the server! You _could_ create two entirely
-separate classes:
-
-```js
-class FastbootCookieService extends Service {
-  // ...
-}
-
-class BrowserCookieService extends Service {
-  // ...
-}
-```
-
-But then we have no way to know that these two services are related. They may
-also be able to _share_ some functionality, which would make each class a bit
-smaller and easier to manage.
-
-So, when registering a service, the best pattern is to create a common base
-class to override. This may mean that each implementation extends the common
-class:
-
-```js
-import Service from '@ember/service';
-
-// services/cookie.js
-export class CookieService extends Service {
-  // shared functionality
-}
-
-export class FastbootCookieService extends CookieService {
-  // fastboot functionality
-}
-
-export class BrowserCookieService extends CookieService {
-  // browser functionality
-}
-```
-
-```js
-// components/my-component.js
-import Component from '@ember/component';
-import { service } from 'ember-totally-not-module-based-services';
-
-export default class MyComponent extends Component {
-  @service(CookieService) cookie;
-}
-```
-
-```js
-// initializers/cookie
-import { register } from 'ember-totally-not-module-based-services';
-import {
-  CookieService,
-  FastbootCookieService,
-  BrowserCookieService,
-} from '../services/cookie';
-
-class OverrideService extends DemoService {
-  hello = 'galaxy!';
-}
-
-export function initialize(appInstance) {
-  if (isFastboot()) {
-    register(appInstance, CookieService, FastbootCookieService);
-  } else {
-    register(appInstance, CookieService, BrowserCookieService);
-  }
-}
-
-export default {
-  initialize,
-};
-```
-
-Or, it may make more sense to have a single "main" implementation, with a
-subclass that overrides some functionality:
-
-```js
-import Service from '@ember/service';
-
-// services/cookie.js
-export class CookieService extends Service {
-  // main functionality
-}
-
-export class FastbootCookieService extends CookieService {
-  // fastboot overrides
-}
-```
-
-```js
-// components/my-component.js
-import Component from '@ember/component';
-import { service } from 'ember-totally-not-module-based-services';
-
-export default class MyComponent extends Component {
-  @service(CookieService) cookie;
-}
-```
-
-```js
-// initializers/cookie
-import { register } from 'ember-totally-not-module-based-services';
-import { CookieService, FastbootCookieService } from '../services/cookie';
-
-class OverrideService extends DemoService {
-  hello = 'galaxy!';
-}
-
-export function initialize(appInstance) {
-  if (isFastboot()) {
-    register(appInstance, CookieService, FastbootCookieService);
-  }
-}
-
-export default {
-  initialize,
-};
-```
-
-Whatever works best for you!
-
-### Extending Services in Tests
-
-The restriction above may seem a bit strict when you're trying to stub out a
-service in tests, but remember - when you override a class, you can override
-anything you need to. You could, for instance, extend the `CookieService` from
-above and completely override both of its public methods:
-
-```js
 test('test some things', async function(assert) {
-  register(
+  registerMockService(
     this.owner,
-    CookieService,
-    class extends CookieService {
-      getValue() {
-        assert.ok(true, 'getValue called!');
-      }
-
-      setValue() {
-        assert.ok(true, 'setValue called!');
+    Store,
+    class  {
+      loadData() {
+        assert.ok(true, 'store data loaded');
       }
     }
   );
